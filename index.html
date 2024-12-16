@@ -36,6 +36,7 @@
             cursor: pointer;
             font-size: 16px;
             margin: 5px;
+            width: 150px;
         }
         button:hover {
             background-color: #45a049;
@@ -45,12 +46,22 @@
             margin-top: 10px;
             display: none;
         }
-        #uploadButton {
+        #uploadButton, #submitButton {
             display: none;
+        }
+        #uploadButton {
             background-color: #2196F3;
+        }
+        #submitButton {
+            background-color: #ff9800;
         }
         .recording {
             background-color: #f44336 !important;
+        }
+        .buttons-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
         }
     </style>
 </head>
@@ -67,8 +78,11 @@
         </div>
         
         <div class="form-group">
-            <button type="button" id="recordButton">התחל הקלטה</button>
-            <button type="button" id="uploadButton">העלה וידאו</button>
+            <div class="buttons-container">
+                <button type="button" id="recordButton">התחל הקלטה</button>
+                <button type="button" id="uploadButton">שמור הקלטה</button>
+                <button type="button" id="submitButton">שלח טופס</button>
+            </div>
             <video id="videoPreview" autoplay playsinline></video>
         </div>
     </form>
@@ -76,11 +90,13 @@
     <script>
         const recordButton = document.getElementById('recordButton');
         const uploadButton = document.getElementById('uploadButton');
+        const submitButton = document.getElementById('submitButton');
         const videoPreview = document.getElementById('videoPreview');
         let mediaRecorder;
         let recordedChunks = [];
         let isRecording = false;
         let stream;
+        let savedVideoBlob = null;
 
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
@@ -104,11 +120,13 @@
                     };
                     
                     mediaRecorder.onstop = () => {
-                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                        const url = URL.createObjectURL(blob);
+                        savedVideoBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                        const url = URL.createObjectURL(savedVideoBlob);
                         videoPreview.srcObject = null;
                         videoPreview.src = url;
                         uploadButton.style.display = 'inline-block';
+                        submitButton.style.display = 'none';
+                        recordButton.style.backgroundColor = '#f44336';
                     };
                     
                     mediaRecorder.start();
@@ -116,6 +134,7 @@
                     recordButton.textContent = 'עצור הקלטה';
                     recordButton.classList.add('recording');
                     uploadButton.style.display = 'none';
+                    submitButton.style.display = 'none';
                     
                 } catch (err) {
                     console.error('Error accessing camera:', err);
@@ -126,12 +145,17 @@
                 mediaRecorder.stop();
                 stream.getTracks().forEach(track => track.stop());
                 isRecording = false;
-                recordButton.textContent = 'התחל הקלטה';
-                recordButton.classList.remove('recording');
+                recordButton.textContent = 'התחל הקלטה חדשה';
             }
         });
 
-        uploadButton.addEventListener('click', async () => {
+        uploadButton.addEventListener('click', () => {
+            uploadButton.style.display = 'none';
+            submitButton.style.display = 'inline-block';
+            alert('ההקלטה נשמרה בהצלחה! כעת מלא את הפרטים ולחץ על "שלח טופס"');
+        });
+
+        submitButton.addEventListener('click', async () => {
             const firstName = document.getElementById('firstName').value;
             const phone = document.getElementById('phone').value;
             
@@ -140,9 +164,13 @@
                 return;
             }
 
-            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            if (!savedVideoBlob) {
+                alert('אנא הקלט וידאו לפני שליחת הטופס');
+                return;
+            }
+
             const formData = new FormData();
-            formData.append('video', blob, 'recording.webm');
+            formData.append('video', savedVideoBlob, 'recording.webm');
             formData.append('firstName', firstName);
             formData.append('phone', phone);
 
@@ -154,18 +182,22 @@
                 });
 
                 if (response.ok) {
-                    alert('הוידאו הועלה בהצלחה!');
+                    alert('הטופס נשלח בהצלחה!');
                     // איפוס הטופס
                     document.getElementById('uploadForm').reset();
                     videoPreview.style.display = 'none';
                     uploadButton.style.display = 'none';
+                    submitButton.style.display = 'none';
+                    recordButton.style.backgroundColor = '#4CAF50';
+                    recordButton.textContent = 'התחל הקלטה';
                     recordedChunks = [];
+                    savedVideoBlob = null;
                 } else {
-                    throw new Error('שגיאה בהעלאת הקובץ');
+                    throw new Error('שגיאה בשליחת הטופס');
                 }
             } catch (error) {
-                console.error('Error uploading video:', error);
-                alert('שגיאה בהעלאת הוידאו. אנא נסה שוב.');
+                console.error('Error submitting form:', error);
+                alert('שגיאה בשליחת הטופס. אנא נסה שוב.');
             }
         });
     </script>
