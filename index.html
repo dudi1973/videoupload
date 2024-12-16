@@ -35,6 +35,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
+            margin: 5px;
         }
         button:hover {
             background-color: #45a049;
@@ -43,6 +44,13 @@
             width: 100%;
             margin-top: 10px;
             display: none;
+        }
+        #uploadButton {
+            display: none;
+            background-color: #2196F3;
+        }
+        .recording {
+            background-color: #f44336 !important;
         }
     </style>
 </head>
@@ -59,55 +67,105 @@
         </div>
         
         <div class="form-group">
-            <button type="button" id="recordButton">צלם וידאו</button>
+            <button type="button" id="recordButton">התחל הקלטה</button>
+            <button type="button" id="uploadButton">העלה וידאו</button>
             <video id="videoPreview" autoplay playsinline></video>
         </div>
     </form>
 
     <script>
         const recordButton = document.getElementById('recordButton');
+        const uploadButton = document.getElementById('uploadButton');
         const videoPreview = document.getElementById('videoPreview');
         let mediaRecorder;
         let recordedChunks = [];
+        let isRecording = false;
+        let stream;
 
         recordButton.addEventListener('click', async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' },
-                    audio: true
-                });
-                
-                videoPreview.style.display = 'block';
-                videoPreview.srcObject = stream;
-                
-                mediaRecorder = new MediaRecorder(stream);
-                
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        recordedChunks.push(event.data);
-                    }
-                };
-                
-                mediaRecorder.onstop = () => {
-                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    const url = URL.createObjectURL(blob);
-                    videoPreview.src = url;
+            if (!isRecording) {
+                // התחל הקלטה
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment' },
+                        audio: true
+                    });
+                    
+                    videoPreview.style.display = 'block';
+                    videoPreview.srcObject = stream;
+                    
+                    mediaRecorder = new MediaRecorder(stream);
                     recordedChunks = [];
-                };
-                
-                mediaRecorder.start();
-                recordButton.textContent = 'סיים הקלטה';
-                
-                recordButton.onclick = () => {
-                    mediaRecorder.stop();
-                    stream.getTracks().forEach(track => track.stop());
-                    recordButton.textContent = 'צלם וידאו';
-                    recordButton.onclick = null;
-                };
-                
-            } catch (err) {
-                console.error('Error accessing camera:', err);
-                alert('לא ניתן לגשת למצלמה. אנא ודא שנתת הרשאות מתאימות.');
+                    
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            recordedChunks.push(event.data);
+                        }
+                    };
+                    
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        videoPreview.srcObject = null;
+                        videoPreview.src = url;
+                        uploadButton.style.display = 'inline-block';
+                    };
+                    
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recordButton.textContent = 'עצור הקלטה';
+                    recordButton.classList.add('recording');
+                    uploadButton.style.display = 'none';
+                    
+                } catch (err) {
+                    console.error('Error accessing camera:', err);
+                    alert('לא ניתן לגשת למצלמה. אנא ודא שנתת הרשאות מתאימות.');
+                }
+            } else {
+                // עצור הקלטה
+                mediaRecorder.stop();
+                stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                recordButton.textContent = 'התחל הקלטה';
+                recordButton.classList.remove('recording');
+            }
+        });
+
+        uploadButton.addEventListener('click', async () => {
+            const firstName = document.getElementById('firstName').value;
+            const phone = document.getElementById('phone').value;
+            
+            if (!firstName || !phone) {
+                alert('אנא מלא את כל השדות הנדרשים');
+                return;
+            }
+
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const formData = new FormData();
+            formData.append('video', blob, 'recording.webm');
+            formData.append('firstName', firstName);
+            formData.append('phone', phone);
+
+            try {
+                // כאן צריך להוסיף את כתובת השרת האמיתית
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    alert('הוידאו הועלה בהצלחה!');
+                    // איפוס הטופס
+                    document.getElementById('uploadForm').reset();
+                    videoPreview.style.display = 'none';
+                    uploadButton.style.display = 'none';
+                    recordedChunks = [];
+                } else {
+                    throw new Error('שגיאה בהעלאת הקובץ');
+                }
+            } catch (error) {
+                console.error('Error uploading video:', error);
+                alert('שגיאה בהעלאת הוידאו. אנא נסה שוב.');
             }
         });
     </script>
